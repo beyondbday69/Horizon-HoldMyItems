@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Extract version from manifest
+        id: vars
+        run: |
+          VERSION=$(python -c "import json; print(json.load(open('horizon-native.json'))['version'])")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+          echo "Extracted version: $VERSION (Tag: v$VERSION)"
+
+      - name: Build hold_my_items.hnmod
+        run: |
+          python -c "
+          import zipfile, os
+          files = ['horizon-native.json'] + sorted(
+              os.path.join(r, n).replace('./', '')
+              for r, _, ns in os.walk('mixins') for n in ns
+          )
+          with zipfile.ZipFile('hold_my_items.hnmod', 'w', zipfile.ZIP_DEFLATED) as z:
+              for f in files:
+                  z.write(f, f)
+          "
+          ls -lh hold_my_items.hnmod
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: "Hold My Items ${{ env.VERSION }}"
+          files: hold_my_items.hnmod
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
