@@ -1,6 +1,6 @@
-# Hold My Items — Horizon native port
+# Hold My Items 5.2.0 — Horizon native port
 
-A native Rust port of [Hold My Items](https://modrinth.com/mod/hold-my-items) 5.1.1's first-person
+A native Rust port of [Hold My Items](https://modrinth.com/mod/hold-my-items) first-person
 hand and item animation engine, by way of
 [iuaititi's Horizon port](https://github.com/iuaiti/Hold-my-items-horizon), built as a **feature of
 the Horizon Android client** rather than as a standalone mod.
@@ -37,12 +37,21 @@ unexpected native source: horizon-compiled.json
 It is in `.gitignore`, and the release asset does not carry it. If you rebuild the bundle
 yourself, leave it out.
 
+### What's new in 5.2.0
+
+- **Fixed Block Breaking / Mining**: Resolved an issue where mining states were being forcefully wiped every frame, preventing players from breaking blocks with empty hands or tools.
+- **Touch & Mobile Controls Support**: Removed the desktop mouse cursor capture (`captured`) requirement so Android touch controls are properly recognized as active gameplay.
+- **Continuous Touch Swings**: Updated hand swing tracking to detect continuous block breaking during touch holds (`clicks.destroying.active`).
+- **Mining Animation Pacing**: Capped main-hand mining swing at 6 ticks so pickaxe swings keep pace with block breaking speed.
+- **Client Features Integration**: Bundles `sound_physics` and `camera_overhaul` feature signals directly in the bundle.
+- **Updated Manifest & Metadata**: Bumped manifest, mixin definitions, runtime title, and bundle package to `5.2.0`.
+
 ### This is a real mod, not a marker
 
 An earlier 5.1.1 release of this repo shipped a ~1 KB marker bundle — a manifest plus a
 `src/lib.rs` stub with only a title and description — which declared the feature but carried no
-actual mod code. That is why the launcher refused it. This 5.1.2 bundle carries the full mixin
-sources (22 files, ~830 KB), which is what a launcher can install and boot.
+actual mod code. That is why the launcher refused it. This 5.2.0 bundle carries the full mixin
+sources (23 files, ~830 KB), which is what a launcher can install and boot.
 
 Rebuild the release asset with:
 

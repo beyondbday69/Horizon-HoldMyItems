@@ -1,10 +1,10 @@
-// Hold My Items (HMI 5.1.1) runtime animation engine for Horizon.
+// Hold My Items (HMI 5.2.0) runtime animation engine for Horizon.
 // Self-contained module mounted at `crate::game::holdmyitems` and testable standalone.
 
 use std::collections::HashMap;
 
 pub const ID: &str = "holdmyitems";
-pub const TITLE: &str = "Hold My Items 5.1.1";
+pub const TITLE: &str = "Hold My Items 5.2.0";
 pub const DESCRIPTION: &str =
     "First-person hand & item physics, 3D block/item poses, per-quad articulation, inspection, and hand lighting.";
 pub const CONFIG_FILE: &str = "config.json";

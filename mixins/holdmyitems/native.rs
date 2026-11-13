@@ -1,4 +1,4 @@
-// Hold My Items (HMI 5.1.1) adapter to `crate::game::Game<'_>`
+// Hold My Items (HMI 5.2.0) adapter to `crate::game::Game<'_>`
 // (Horizon Nightly c9d474dd9116e84c243f8992d75c11314df56f06, see horizon-mixin.toml).
 // Injected as `crate::game::holdmyitems_native` (`file = "crates/horizon-client/src/game.rs"`).
 
@@ -1072,7 +1072,7 @@ impl Game<'_> {
             _ => {
                 let cfg = active_config(self).unwrap_or_default();
                 self.native_chat(&format!(
-                    "§b[Hold My Items 5.1.1] §73D Blocks: {} | Particles: {} | Lights: {} | Speed: {}t | Commands: /hmi reload, /hmi inspect, /hmi speed <ticks>, /hmi offset <x> <y> <z>, /hmi reset",
+                    "§b[Hold My Items 5.2.0] §73D Blocks: {} | Particles: {} | Lights: {} | Speed: {}t | Commands: /hmi reload, /hmi inspect, /hmi speed <ticks>, /hmi offset <x> <y> <z>, /hmi reset",
                     if cfg.block_render_3d { "ON" } else { "OFF" },
                     if cfg.hand_particles { "ON" } else { "OFF" },
                     if cfg.dynamic_lights { "ON" } else { "OFF" },
@@ -1082,7 +1082,7 @@ impl Game<'_> {
         }
     }
 
-    /// `native_mods`: lists Hold My Items 5.1.1 in `Options > Mods`.
+    /// `native_mods`: lists Hold My Items 5.2.0 in `Options > Mods`.
     pub(super) fn holdmyitems_mod_entry() -> NativeMod {
         NativeMod {
             id: hmi::ID.to_owned(),
