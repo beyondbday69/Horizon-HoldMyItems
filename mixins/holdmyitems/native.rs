@@ -306,11 +306,8 @@ impl Game<'_> {
     #[inline]
     fn is_hmi_actively_playing(&self) -> bool {
         self.native_playing()
-            && self.focused
-            && self.captured
             && !self.pause
             && self.screen == Screen::Playing
-            && self.title.is_none()
             && !self.dialog_open()
     }
 
@@ -322,43 +319,17 @@ impl Game<'_> {
         if self.creative && !self.res.items().can_destroy_block(self.held(), true) {
             return false;
         }
-        self.mining.is_some() || (self.clicks.destroying.active && self.left)
+        self.mining.is_some() || self.clicks.destroying.active
     }
 
-    /// Sanitizes stuck mouse button (`self.left`, `self.right`) and block-destroying states
-    /// (`self.clicks.destroying.active`, `self.mining`) when screens, dialogs, pause, or
-    /// window unfocus/uncapture occur, or when holding non-mining weapons in Creative mode.
+    /// Sanitizes continuous animation hold state when screens, dialogs, or pause occur.
+    /// Does not mutate game input or mining state so block breaking is never interrupted.
     fn sanitize_hmi_mouse_state(&mut self) {
         if !self.is_hmi_actively_playing() {
-            self.left = false;
-            self.right = false;
-            self.clicks.destroying.active = false;
-            if self.mining.is_some() {
-                self.stop_remote_mining();
-                self.mining = None;
-            }
             with_state(|s| {
                 s.left_continued = false;
                 s.right_continued = false;
             });
-            return;
-        }
-
-        // In Creative mode, weapons with `can_destroy_blocks_in_creative = false` (swords, tridents, maces)
-        // abort `self.mining` in Horizon without clearing `self.clicks.destroying.active`, which otherwise
-        // leaves continuous destroy active and forces block-breaking animations.
-        let cannot_mine_creative =
-            self.creative && !self.res.items().can_destroy_block(self.held(), true);
-        if cannot_mine_creative || self.using.is_some() {
-            if self.clicks.destroying.active {
-                self.clicks.destroying.active = false;
-            }
-            if self.mining.is_some() {
-                self.stop_remote_mining();
-                self.mining = None;
-            }
-        } else if !self.left && self.mining.is_none() && self.clicks.destroying.active {
-            self.clicks.destroying.active = false;
         }
     }
 
@@ -377,7 +348,7 @@ impl Game<'_> {
         let flags = self.classify_stack(stack, 0.0);
         let is_main = hand == Hand::Main;
         let breaking = self.is_hmi_breaking_block();
-        let left_now = self.left;
+        let left_now = self.left || (is_main && self.clicks.destroying.active);
         let right_now = self.right;
         with_state(|s| {
             let continuous_hold = if is_main {
@@ -404,7 +375,7 @@ impl Game<'_> {
             return;
         }
         self.sanitize_hmi_mouse_state();
-        let left_now = self.left;
+        let left_now = self.left || self.clicks.destroying.active;
         let right_now = self.right;
         let effects = &self.potions.effects;
         let haste = effects
@@ -456,7 +427,7 @@ impl Game<'_> {
         self.sanitize_hmi_mouse_state();
 
         let actively_playing = self.is_hmi_actively_playing();
-        let left_now = self.left;
+        let left_now = self.left || self.clicks.destroying.active;
         let right_now = self.right;
         let dt = if self.pause {
             0.0
