@@ -15,31 +15,52 @@ eating, climbing, and per-item poses.
 
 ## What this repo is
 
-Two things:
+**Horizon mod source**, in the layout the launcher expects:
 
 | Path | What it is |
 |---|---|
-| `hold-my-items-core/` | The animation engine, game-free, buildable and testable on its own |
-| `hold_my_items.hnmod` | The bundle that declares the feature to Horizon |
+| `horizon-native.json` | The manifest: `schema`, `id`, `version`, `game`, `horizon`, `mixins`, `hooks` |
+| `mixins/holdmyitems/` | The mixin and hook sources, plus `horizon-mixin.toml` and the Lua/item data packs |
+| `hold_my_items.hnmod` | The packaged bundle (release asset), built from the two above |
 
-### The `.hnmod` is not a working mod by itself
+There is no `horizon-compiled.json` here on purpose — see below.
 
-`hold_my_items.hnmod` is a ~1 KB **marker**. It carries `horizon-native.json`,
-`horizon-compiled.json` and a `src/lib.rs` stub whose export is a title and a description. It
-registers the feature id `hold_my_items` with Horizon so the game turns the code on and shows a row
-under *Options → Mods*.
+### `horizon-compiled.json` is build output, not source
 
-The code that actually animates and draws the hand is **not** in the bundle. It is compiled into
-the Horizon client itself, in `crates/hold-my-items-core/` (mirrored here) and
-`crates/horizon-client/src/game/hold_my_items.rs` (the adapter that drives it from the game).
+Horizon generates it when it compiles a bundle from mixin sources. Committing it makes the
+launcher reject the bundle:
 
-So: installing the `.hnmod` on a stock Horizon build does nothing. It only means something in a
-client that already contains this feature. It is published so the feature is visibly declared and
-versioned, not because dropping it in adds animation.
+```
+unexpected native source: horizon-compiled.json
+```
+
+It is in `.gitignore`, and the release asset does not carry it. If you rebuild the bundle
+yourself, leave it out.
+
+### This is a real mod, not a marker
+
+An earlier 5.1.1 release of this repo shipped a ~1 KB marker bundle — a manifest plus a
+`src/lib.rs` stub with only a title and description — which declared the feature but carried no
+actual mod code. That is why the launcher refused it. This 5.1.2 bundle carries the full mixin
+sources (22 files, ~830 KB), which is what a launcher can install and boot.
+
+Rebuild the release asset with:
+
+```sh
+python3 -c "
+import zipfile, os
+files = ['horizon-native.json'] + sorted(
+    os.path.join(r, n).replace('./', '')
+    for r, _, ns in os.walk('mixins') for n in ns)
+with zipfile.ZipFile('hold_my_items.hnmod', 'w', zipfile.ZIP_DEFLATED) as z:
+    for f in files:
+        z.write(f, f)
+"
+```
 
 ## Requirements
 
-- A **Horizon Android dev build** with this feature compiled in
+- Horizon Android, `hooks` API **415** or later (the manifest's `hooks` field)
 - Android, arm64-v8a
 - Enable it after installing: **Options → Mods → Hold My Items → enable** (mods are off by default)
 
@@ -76,23 +97,15 @@ There is also an inspect key, **C** by default, bound to *Inspect Held Item*.
 The animation maths are ported; the injector, the render takeover and the resource pack of the
 original Horizon port are not. This runs as a native feature, not a script injection.
 
-## Build and test
-
-```sh
-cargo test
-```
-
-Five unit tests cover the engine's maths. Nothing else in this repo builds on its own — the
-adapter needs the Horizon client.
-
 ## How it fits into Horizon
 
-The feature is gated the same way a bundled mod is: it runs only when `native_on("hold_my_items")`
-is true and the loaded bundle lists the `hold_my_items` feature.
+`horizon-mixin.toml` lists two modules and thirteen injection points: `runtime` becomes
+`crate::game::holdmyitems` and `native` becomes `crate::game::holdmyitems_native`, with the
+injections hooking the hand render, swing, tick, frame, HUD, settings and key paths.
 
-The engine is deliberately game-free. Everything that needs the game — reading the item in hand,
-the player's state, the camera, the frame clock — goes through a narrow set of inputs the adapter
-supplies, which is why the engine has real tests instead of only compiling.
+The mod pins `horizon_revision` `c9d474dd9116e84c243f8992d75c11314df56f06`, which is the revision
+the mixin sources were written against. The manifest's `horizon` field carries that same revision,
+because the launcher checks the two agree.
 
 ## Licence
 

@@ -1,4 +1,0 @@
-# Standalone workspace, so the animation engine builds and tests without the game.
-[workspace]
-resolver = "2"
-members = ["hold-my-items-core"]

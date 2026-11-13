@@ -1,17 +1,5 @@
-//! Hold My Items 5.1.1's first-person hand and item animation engine, ported to
-//! Rust, for Horizon's built-in `hold_my_items` feature.
-//!
-//! The animation maths are a line-by-line port of Hold My Items 5.1.1, by way of
-//! iuaititi's Horizon port <https://github.com/iuaiti/Hold-my-items-horizon> (MIT),
-//! which converted HMI's `hand_pose.lua`, `hand_relative_pose.lua`, `item_pose.lua`
-//! and `item_model.lua` into Rust. See `THIRD_PARTY_NOTICES.md`.
-//!
-//! Nothing here reaches the engine: no rendering, no game state, no world. The host
-//! reads a player's frame ([`PlayerFrameInput`]) and the two held items
-//! ([`ItemFlags`]) and gets back the matrices to draw with ([`HandEvaluation`]).
-//! That keeps the whole animation engine testable on its own.
-
-#![forbid(unsafe_code)]
+// Hold My Items (HMI 5.1.1) runtime animation engine for Horizon.
+// Self-contained module mounted at `crate::game::holdmyitems` and testable standalone.
 
 use std::collections::HashMap;
 
@@ -1391,10 +1379,6 @@ pub struct HmiState {
     pub main_hand_swing_ticks: u32,
     pub main_hand_swing_progress: f32,
     pub last_main_hand_swing_progress: f32,
-    /// Ticks one swing takes, when the host wants something other than the item's
-    /// own speed. The host sets this while a block is being broken, so mining
-    /// repeats at the game's swing rate instead of the attack rate.
-    pub swing_duration_override: Option<u32>,
     pub off_hand_swinging: bool,
     pub off_hand_swing_ticks: u32,
     pub off_hand_swing_progress: f32,
@@ -1508,7 +1492,6 @@ impl Default for HmiState {
             main_hand_swing_ticks: 0,
             main_hand_swing_progress: 0.0,
             last_main_hand_swing_progress: 0.0,
-            swing_duration_override: None,
             off_hand_swinging: false,
             off_hand_swing_ticks: 0,
             off_hand_swing_progress: 0.0,
@@ -1550,13 +1533,6 @@ impl HmiState {
             b
         };
         modified.max(2) as u32
-    }
-
-    /// One swing's length in ticks: the host's override when it set one (mining),
-    /// otherwise the item's own speed.
-    fn swing_base(&self, item: &ItemFlags, config: &Config) -> u32 {
-        self.swing_duration_override
-            .unwrap_or_else(|| item.swing_duration(config.swing_speed, &self.overrides))
     }
 
     pub fn clear_active_swings(&mut self) {
@@ -1604,7 +1580,7 @@ impl HmiState {
         continuous_hold: bool,
     ) {
         let max_ticks = Self::modify_swing_max(
-            self.swing_base(item, config),
+            item.swing_duration(config.swing_speed, &self.overrides),
             self.last_haste,
             self.last_fatigue,
         );
@@ -1631,13 +1607,8 @@ impl HmiState {
                 self.last_main_hand_swing_progress = 0.0;
                 self.main_hand_swinging = true;
                 self.main_swing_ticked_20tps = false;
-                // The side only alternates between discrete swings: that is the sword
-                // combo. A held press (mining) keeps digging from the same side, as
-                // vanilla does, instead of rocking the tool back and forth.
-                if !already_just_started && !continuous_hold {
-                    self.swing_m_hand = !self.swing_m_hand;
-                }
                 if !already_just_started {
+                    self.swing_m_hand = !self.swing_m_hand;
                     self.main_swing_count = self.main_swing_count.wrapping_add(1);
                 }
             }
@@ -1657,7 +1628,7 @@ impl HmiState {
                 self.last_off_hand_swing_progress = 0.0;
                 self.off_hand_swinging = true;
                 self.off_swing_ticked_20tps = false;
-                if !already_just_started && !continuous_hold {
+                if !already_just_started {
                     self.swing_o_hand = !self.swing_o_hand;
                 }
             }
@@ -1678,7 +1649,7 @@ impl HmiState {
         self.last_fatigue = fatigue;
 
         let max_main = Self::modify_swing_max(
-            self.swing_base(main_item, config),
+            main_item.swing_duration(config.swing_speed, &self.overrides),
             dig_speed,
             fatigue,
         );
@@ -1703,7 +1674,7 @@ impl HmiState {
         }
 
         let max_off = Self::modify_swing_max(
-            self.swing_base(off_item, config),
+            off_item.swing_duration(config.swing_speed, &self.overrides),
             dig_speed,
             fatigue,
         );
@@ -1749,7 +1720,7 @@ impl HmiState {
             self.main_swing_ticked_20tps = false;
         } else if dt > 0.0 {
             let max_main = Self::modify_swing_max(
-                self.swing_base(main_item, config),
+                main_item.swing_duration(config.swing_speed, &self.overrides),
                 self.last_haste,
                 self.last_fatigue,
             ) as f32;
@@ -1776,7 +1747,7 @@ impl HmiState {
             self.off_swing_ticked_20tps = false;
         } else if dt > 0.0 {
             let max_off = Self::modify_swing_max(
-                self.swing_base(off_item, config),
+                off_item.swing_duration(config.swing_speed, &self.overrides),
                 self.last_haste,
                 self.last_fatigue,
             ) as f32;
@@ -4307,14 +4278,5 @@ mod tests {
         state.on_swing_ex(true, &sword, &cfg, true);
         assert_eq!(state.swing_m_hand, combo_before_hold);
         assert_eq!(state.main_swing(0.5), prog_before_hold);
-
-        // Mining digs from one side: a held press that runs a swing to completion keeps
-        // the side instead of alternating it the way a discrete attack does.
-        let held_side = state.swing_m_hand;
-        for _ in 0..24 {
-            state.step_frame(0.032, 0.5, &sword, &off, &input, &cfg);
-            state.on_swing_ex(true, &sword, &cfg, true);
-            assert_eq!(state.swing_m_hand, held_side);
-        }
     }
 }

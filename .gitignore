@@ -1,1 +1,8 @@
+# Build output. Horizon generates this from the mixin sources when a bundle is
+# compiled, so it is never source; committing it makes launchers reject the bundle
+# with "unexpected native source: horizon-compiled.json".
+horizon-compiled.json
+
+# Rust build output
 /target
+**/*.rs.bk
