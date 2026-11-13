@@ -28,6 +28,11 @@ const TRIDENT_DRAW_ROLL_DEG: f32 = -10.0;
 const BED_ARM_CLEARANCE_X: f32 = -0.15;
 const BED_ARM_CLEARANCE_Z: f32 = -0.10;
 
+/// Longest one main-hand swing may take while a block is being broken, in ticks (vanilla's swing
+/// length). The item's normal swing (10 ticks by default) is made for attacks; mining with it
+/// finishes the block long before one swing ends, so the hand looks stuck on one slow swing.
+const MINING_SWING_TICKS: u32 = 6;
+
 // ---------------------------------------------------------------------------
 // Easing functions (1:1 port of com.holdmylua.source.scripting.script_wrappers.Easings)
 // ---------------------------------------------------------------------------
@@ -1390,6 +1395,9 @@ pub struct HmiState {
     pub off_swing_ticked_20tps: bool,
     pub last_haste: Option<i32>,
     pub last_fatigue: Option<i32>,
+    /// Whether a block is being broken, as of the last swing start or `step_frame`. While true,
+    /// main-hand swings are capped at `MINING_SWING_TICKS` so the animation keeps pace with mining.
+    pub block_breaking: bool,
     pub angles_initialized: bool,
 
     pub particles: Vec<HmiParticle>,
@@ -1503,6 +1511,7 @@ impl Default for HmiState {
             off_swing_ticked_20tps: false,
             last_haste: None,
             last_fatigue: None,
+            block_breaking: false,
             angles_initialized: false,
             particles: Vec::new(),
             rng_state: 0x9E37_79B9_7F4A_7C15,
@@ -1533,6 +1542,18 @@ impl HmiState {
             b
         };
         modified.max(2) as u32
+    }
+
+    /// One swing's length in ticks before haste/fatigue: the item's own speed, capped at
+    /// `MINING_SWING_TICKS` for the main hand while a block is being broken so the swing
+    /// repeats as fast as the block progresses.
+    fn swing_base(&self, item: &ItemFlags, config: &Config, main_hand: bool) -> u32 {
+        let ticks = item.swing_duration(config.swing_speed, &self.overrides);
+        if main_hand && self.block_breaking {
+            ticks.min(MINING_SWING_TICKS)
+        } else {
+            ticks
+        }
     }
 
     pub fn clear_active_swings(&mut self) {
@@ -1580,7 +1601,7 @@ impl HmiState {
         continuous_hold: bool,
     ) {
         let max_ticks = Self::modify_swing_max(
-            item.swing_duration(config.swing_speed, &self.overrides),
+            self.swing_base(item, config, main_hand),
             self.last_haste,
             self.last_fatigue,
         );
@@ -1649,7 +1670,7 @@ impl HmiState {
         self.last_fatigue = fatigue;
 
         let max_main = Self::modify_swing_max(
-            main_item.swing_duration(config.swing_speed, &self.overrides),
+            self.swing_base(main_item, config, true),
             dig_speed,
             fatigue,
         );
@@ -1710,6 +1731,7 @@ impl HmiState {
         config: &Config,
     ) -> Vec<QueuedSound> {
         let mut sounds = Vec::new();
+        self.block_breaking = input.block_breaking;
         let dt = if dt.is_finite() { dt.clamp(0.0, 0.05) } else { 0.0 };
         let dt30 = dt * 30.0;
         let dt20 = dt * 20.0;
@@ -1720,7 +1742,7 @@ impl HmiState {
             self.main_swing_ticked_20tps = false;
         } else if dt > 0.0 {
             let max_main = Self::modify_swing_max(
-                main_item.swing_duration(config.swing_speed, &self.overrides),
+                self.swing_base(main_item, config, true),
                 self.last_haste,
                 self.last_fatigue,
             ) as f32;
@@ -4278,5 +4300,59 @@ mod tests {
         state.on_swing_ex(true, &sword, &cfg, true);
         assert_eq!(state.swing_m_hand, combo_before_hold);
         assert_eq!(state.main_swing(0.5), prog_before_hold);
+    }
+
+    #[test]
+    fn pickaxe_swing_keeps_pace_with_mining() {
+        let cfg = Config::default();
+        let pickaxe = ItemFlags {
+            id: "minecraft:iron_pickaxe".to_owned(),
+            is_empty: false,
+            is_block: false,
+            use_kind: UseKind::None,
+            is_charged_crossbow: false,
+            is_cooling_down: false,
+            spear_can_damage: false,
+            spear_can_dismount: false,
+            spear_can_knockback: false,
+            spear_hit_impact: false,
+        };
+        let off = ItemFlags::empty();
+
+        // Frames (50 ms each, i.e. one tick) one swing takes to finish.
+        let frames_for_one_swing = |block_breaking: bool| -> u32 {
+            let mut state = HmiState::default();
+            state.block_breaking = block_breaking;
+            let input = PlayerFrameInput {
+                on_ground: true,
+                block_breaking,
+                ..Default::default()
+            };
+            state.on_swing_ex(true, &pickaxe, &cfg, block_breaking);
+            let mut frames = 0;
+            while state.main_hand_swinging && frames < 100 {
+                state.step_frame(0.05, 0.5, &pickaxe, &off, &input, &cfg);
+                frames += 1;
+            }
+            frames
+        };
+
+        let attack = frames_for_one_swing(false);
+        let mining = frames_for_one_swing(true);
+        assert_eq!(attack, cfg.swing_speed);
+        assert_eq!(mining, MINING_SWING_TICKS);
+
+        // A swing that started as a normal click speeds up once mining begins,
+        // without the progress jumping backwards or past the end.
+        let mut state = HmiState::default();
+        let idle = PlayerFrameInput { on_ground: true, ..Default::default() };
+        let digging = PlayerFrameInput { on_ground: true, block_breaking: true, ..Default::default() };
+        state.on_swing_ex(true, &pickaxe, &cfg, false);
+        state.step_frame(0.05, 0.5, &pickaxe, &off, &idle, &cfg);
+        let before = state.main_hand_swing_progress;
+        state.step_frame(0.05, 0.5, &pickaxe, &off, &digging, &cfg);
+        assert!(state.block_breaking);
+        assert!(state.main_hand_swing_progress > before);
+        assert!(state.main_hand_swing_progress < 1.0);
     }
 }

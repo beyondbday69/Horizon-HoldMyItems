@@ -389,6 +389,9 @@ impl Game<'_> {
                 s.right_continued = right_now;
                 cont
             };
+            if is_main {
+                s.hmi.block_breaking = breaking;
+            }
             s.hmi.on_swing_ex(is_main, &flags, &cfg, continuous_hold);
         });
     }
